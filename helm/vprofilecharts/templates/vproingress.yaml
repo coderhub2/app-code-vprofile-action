@@ -7,7 +7,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: vpro.proreviews.life
+  - host: vprof.proreviews.life
     http:
       paths:
       - path: /
