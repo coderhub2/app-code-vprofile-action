@@ -4,7 +4,7 @@ pipeline {
 	
 	tools {
         maven "maven3"
-	jdk "JDK11"
+        jdk "JDK11"
 	
     }
 	
@@ -27,87 +27,85 @@ pipeline {
             }
         }
 
-	stage('UNIT TEST'){
-            steps {
-                sh 'mvn test'
-            }
-        }
-
-	stage('INTEGRATION TEST'){
-            steps {
-                sh 'mvn verify -DskipUnitTests'
-            }
-        }
-		
-        stage ('CODE ANALYSIS WITH CHECKSTYLE'){
-            steps {
-                sh 'mvn checkstyle:checkstyle'
-            }
-            post {
-                success {
-                    echo 'Generated Analysis Result'
+        stage('UNIT TEST'){
+                steps {
+                    sh 'mvn test'
                 }
             }
-        }
 
-        stage('CODE ANALYSIS with SONARQUBE') {
-          
-		  environment {
-             scannerHome = tool 'sonarscanner4'
-          }
-
-          steps {
-            withSonarQubeEnv('sonar-pro') {
-               sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
-                   -Dsonar.projectName=vprofile-repo \
-                   -Dsonar.projectVersion=1.0 \
-                   -Dsonar.sources=src/ \
-                   -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
-                   -Dsonar.junit.reportsPath=target/surefire-reports/ \
-                   -Dsonar.jacoco.reportsPath=target/jacoco.exec \
-                   -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
-            }
-
-            timeout(time: 10, unit: 'MINUTES') {
-               waitForQualityGate abortPipeline: true
-            }
-          }
-        }
-
-        stage('build app image'){
-            steps{
-                script{
-                  dockkerImage = docker.build registry + ":$BUILD_NUMBER"
-            }
-
+        stage('INTEGRATION TEST'){
+                steps {
+                    sh 'mvn verify -DskipUnitTests'
+                }
             }
             
-        }
-
-        stage('upload image to docker'){
-            steps{
-                script{
-                    docker.withRegistry('', registryCredential)
-                    dockkerImage.push("$BUILD_NUMBER")
-                    dockkerImage.push("latest")
+        stage ('CODE ANALYSIS WITH CHECKSTYLE'){
+                steps {
+                    sh 'mvn checkstyle:checkstyle'
+                }
+                post {
+                    success {
+                        echo 'Generated Analysis Result'
+                    }
                 }
             }
-        }
-
-        stage('remove unused images'){
-            steps{
-                sh "docker rmi registry + :$BUILD_NUMBER"
+    
+        stage('CODE ANALYSIS with SONARQUBE') {
+            
+            environment {
+                scannerHome = tool 'sonarscanner4'
             }
-        }
 
-        stage('kube deploy'){
-            agent{label 'KOPS'}
-              steps{
-                sh "helm upgrade --install --force vpro-stack helm/vprofilecharts --set appimage=${registry}:${$BUILD_NUMBER} --namespace prod"
-              }
-        }
-        
+            steps {
+                withSonarQubeEnv('sonar-pro') {
+                sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
+                    -Dsonar.projectName=vprofile-repo \
+                    -Dsonar.projectVersion=1.0 \
+                    -Dsonar.sources=src/ \
+                    -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
+                    -Dsonar.junit.reportsPath=target/surefire-reports/ \
+                    -Dsonar.jacoco.reportsPath=target/jacoco.exec \
+                    -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
+                }
+
+                timeout(time: 10, unit: 'MINUTES') {
+                waitForQualityGate abortPipeline: true
+                }
+            }
+            }
+
+        stage('build app image'){
+                steps{
+                  script{
+                    dockkerImage = docker.build registry + ":$BUILD_NUMBER"
+                }
+
+                }
+                
+            }
+
+        stage('Upload Image'){
+            steps{
+                script {
+                  docker.withRegistry('', registryCredential) {
+                    dockerImage.push("V$BUILD_NUMBER")
+                    dockerImage.push('latest')
+                    }
+                }
+            }
+            }
+
+        stage('Remove Unused docker image') {
+            steps{
+                sh "docker rmi $registry:V$BUILD_NUMBER"
+            }
+            }
+
+        stage('Kubernetes Deploy') {
+            agent {label 'KOPS'}
+                steps {
+                  sh "helm upgrade --install --force vprofile-stack helm/vprofilecharts --set appimage=${registry}:V${BUILD_NUMBER} --namespace prod"
+                }
+            }
     }
-
-
 }
